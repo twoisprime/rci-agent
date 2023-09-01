@@ -38,16 +38,6 @@ To run the code, simply execute the following command:
 python main.py --env [TASK NAME] --llm [LLM NAME] --num-episodes [NUM EPISODES] --erci [NUM Explicit RCI] --irci [NUM Implicit RCI] --sgrounding
 ```
 Here are the arguments you need to specify:
-* `--env`: MiniWoB++ task name
-* `--llm`: the name of language model. model name and the corresponding API name is specified below.
-    * `chatgpt`: "gpt-3.5-turbo"
-    * `davinci`: "text-davinci-003"
-    * `ada`: "ada"
-    * `babbage`: "babbage" 
-    * `curie`: "curie"
-    * `davinci1`: "davinci"
-    * `davinci2`: "text-davinci-002"
-
 * `--env`: Name of the MiniWoB++ task you want to run. You can see the list of available tasks in `available_tasks.txt`
 * `--llm`: Name of the language model you want to use. The model name and corresponding API name are specified below:
     * chatgpt: "gpt-3.5-turbo"
