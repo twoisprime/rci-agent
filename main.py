@@ -1,5 +1,6 @@
 import argparse
 import random
+import time
 
 import computergym
 import gym
@@ -39,6 +40,7 @@ def web(opt, url):
         )
 
         html_body = get_html_state_from_real(driver, opt)
+        logging.info(f"html body: {html_body}")
 
         llm_agent.update_html_state(html_body)
 
@@ -54,12 +56,15 @@ def web(opt, url):
         logging.info(f"The number of generated action steps: {step}")
         for _ in range(step):
             instruction = llm_agent.generate_action()
-            print(instruction)
+            logging.info(instruction)
+            time.sleep(30)
 
             perform_instruction(driver, instruction)
 
             html_body = get_html_state_from_real(driver, opt)
             llm_agent.update_html_state(html_body)
+
+        time.sleep(5)
 
     driver.quit()
 
@@ -67,6 +72,11 @@ def web(opt, url):
 def get_html_state_from_real(driver, opt):
     if opt.env == "facebook":
         main_html_xpath = '//*[@id="content"]'
+        html_body = driver.find_element(By.XPATH, main_html_xpath).get_attribute(
+            "outerHTML"
+        )
+    elif opt.env == "test":
+        main_html_xpath = '//*[@id="root"]'
         html_body = driver.find_element(By.XPATH, main_html_xpath).get_attribute(
             "outerHTML"
         )
@@ -115,7 +125,7 @@ def get_webdriver(url):
     options.add_argument("disable-gpu")
     options.add_argument("no-sandbox")
 
-    driver = webdriver.Chrome(chrome_options=options)
+    driver = webdriver.Chrome(options=options)
     driver.implicitly_wait(5)
     driver.maximize_window()
     driver.implicitly_wait(5)
@@ -209,6 +219,9 @@ if __name__ == "__main__":
     opt = parse_opt()
     if opt.env == "facebook":
         url = "https://www.facebook.com/"
+        web(opt, url)
+    elif opt.env == "test":
+        url = "https://robotsparebinindustries.com/"
         web(opt, url)
     else:
         miniwob(opt)

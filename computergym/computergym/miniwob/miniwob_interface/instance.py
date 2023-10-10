@@ -161,6 +161,8 @@ class MiniWoBInstance(Thread):
             self.index
         )
         options = webdriver.ChromeOptions()
+        # options.binary_location = "/usr/bin/google-chrome"
+        options.chrome_driver_binary = "/usr/bin/chromedriver"
         if self.headless:
             options.add_argument("headless")
             options.add_argument("disable-gpu")

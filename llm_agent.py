@@ -63,6 +63,8 @@ class LLMAgent:
             openai.api_key = api_key
         if self.llm == "chatgpt":
             self.model = "gpt-3.5-turbo"
+        if self.llm == "instruct":
+            self.model = "gpt-3.5-turbo-instruct"
         elif self.llm == "gpt4":
             self.model = "gpt-4"
         elif self.llm == "davinci":
