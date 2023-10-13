@@ -17,7 +17,7 @@ from computergym.miniwob.miniwob_interface.action import (
 import re
 
 
-class LLMAgent:
+class LLMWebAgent:
     def __init__(
         self,
         env: str,
@@ -26,14 +26,18 @@ class LLMAgent:
         llm="chatgpt",
         with_task=True,
         state_grounding=True,
+        test_llm=False,
     ) -> None:
         self.rci_limit = rci_limit
         self.rci_plan_loop = rci_plan_loop
         self.llm = llm
         self.prompt = Prompt(env=env)
         self.state_grounding = state_grounding
+        self.test_llm = test_llm
 
+        self.dummy = None
         self.load_model()
+        self.load_dummy()
 
         self.html_state = ""
         self.task = ""
@@ -41,7 +45,7 @@ class LLMAgent:
         self.current_plan = ""
         self.past_plan = []
         self.past_instruction = []
-        self.custom_gaol = False
+        self.custom_goal = False
 
         self.history_name = time.strftime("%Y%m%d-%H%M%S")
         config_string = (
@@ -81,6 +85,20 @@ class LLMAgent:
             self.model = "text-davinci-002"
         else:
             raise NotImplemented
+        
+    def load_dummy(self):
+        filepath = Path(f"test/{self.llm}.json")
+        if filepath.exists():
+            try:
+                with open(filepath, "r") as f:
+                    self.dummy = json.load(f)
+            except Exception as e:
+                logging.error(e)
+                raise ValueError("Could not load LLM dummy")
+        else:
+            self.dummy = {}
+            with open(filepath, "w") as f:
+                json.dump(self.dummy, f, indent=4)
 
     def save_result(self, result):
         with open(self.file_path, "a") as f:
@@ -109,8 +127,17 @@ class LLMAgent:
 
         return
 
+    # save responses to reuse later for testing
+    def save_llm(self, pt, message):
+        if self.dummy is None:
+            raise ValueError("Dummy is not loaded")
+        if pt not in self.dummy:
+            self.dummy[pt] = message
+            with open(f"test/{self.llm}.json", "w") as f:
+                json.dump(self.dummy, f, indent=4)
+
     def set_goal(self, goal: str):
-        self.custom_gaol = True
+        self.custom_goal = True
         self.task = goal
 
         return
@@ -160,58 +187,58 @@ class LLMAgent:
 
         return pt, plan
 
-    def rci_action(self, instruciton: str, pt=None):
-        instruciton = self.process_instruction(instruciton)
+    def rci_action(self, instruction: str, pt=None):
+        instruction = self.process_instruction(instruction)
 
         loop_num = 0
-        while self.check_regex(instruciton):
+        while self.check_regex(instruction):
             if loop_num >= self.rci_limit:
-                print(instruciton)
+                print(instruction)
                 self.save(pt)
                 raise ValueError("Action RCI failed")
 
             pt += self.prompt.rci_action_prompt
-            instruciton = self.get_response(pt)
+            instruction = self.get_response(pt)
 
-            pt += instruciton
-            instruciton = self.process_instruction(instruciton)
+            pt += instruction
+            instruction = self.process_instruction(instruction)
 
             loop_num += 1
 
-        return pt, instruciton
+        return pt, instruction
 
-    def check_regex(self, instruciton):
+    def check_regex(self, instruction):
         return (
-            (not re.search(self.prompt.clickxpath_regex, instruciton, flags=re.I))
-            and (not re.search(self.prompt.chatgpt_type_regex, instruciton, flags=re.I))
-            and (not re.search(self.prompt.davinci_type_regex, instruciton, flags=re.I))
-            and (not re.search(self.prompt.press_regex, instruciton, flags=re.I))
-            and (not re.search(self.prompt.clickoption_regex, instruciton, flags=re.I))
-            and (not re.search(self.prompt.movemouse_regex, instruciton, flags=re.I))
+            (not re.search(self.prompt.clickxpath_regex, instruction, flags=re.I))
+            and (not re.search(self.prompt.chatgpt_type_regex, instruction, flags=re.I))
+            and (not re.search(self.prompt.davinci_type_regex, instruction, flags=re.I))
+            and (not re.search(self.prompt.press_regex, instruction, flags=re.I))
+            and (not re.search(self.prompt.clickoption_regex, instruction, flags=re.I))
+            and (not re.search(self.prompt.movemouse_regex, instruction, flags=re.I))
         )
 
-    def process_instruction(self, instruciton: str):
-        end_idx = instruciton.find("`")
+    def process_instruction(self, instruction: str):
+        end_idx = instruction.find("`")
         if end_idx != -1:
-            instruciton = instruciton[:end_idx]
+            instruction = instruction[:end_idx]
 
-        instruciton = instruciton.replace("`", "")
-        instruciton = instruciton.replace("\n", "")
-        instruciton = instruciton.replace("\\n", "\n")
-        instruciton = instruciton.strip()
-        instruciton = instruciton.strip("'")
+        instruction = instruction.replace("`", "")
+        instruction = instruction.replace("\n", "")
+        instruction = instruction.replace("\\n", "\n")
+        instruction = instruction.strip()
+        instruction = instruction.strip("'")
 
-        return instruciton
+        return instruction
 
     def get_plan_step(self):
         idx = 1
         while True:
             if (str(idx) + ".") not in self.current_plan:
-                return (idx - 1) + 1
+                return (idx - 1)
             idx += 1
 
     def initialize_plan(self):
-        if not self.custom_gaol:
+        if not self.custom_goal:
             if self.with_task:
                 self.initialize_task()
 
@@ -237,6 +264,12 @@ class LLMAgent:
 
     def get_response(self, pt):
         import inspect
+
+        if self.test_llm:
+            logging.info(
+                f"Send a request to the dummy from {inspect.stack()[1].function}"
+            )
+            return self.get_dummy_response(pt)
 
         logging.info(
             f"Send a request to the language model from {inspect.stack()[1].function}"
@@ -283,9 +316,17 @@ class LLMAgent:
             else:
                 if message:
                     logging.info(f"Response from the language model: {message}")
+                    if not self.test_llm:
+                        self.save_llm(pt, message)
                     break
 
         return message
+
+    def get_dummy_response(self, pt):
+        if pt in self.dummy:
+            return self.dummy[pt]
+        else:
+            raise ValueError("Dummy does not have the prompt")
 
     def generate_action(self) -> str:
         pt = self.prompt.base_prompt
@@ -330,7 +371,7 @@ class LLMAgent:
 
         pt, message = self.update_action(pt, message)
 
-        pt, instruction = self.rci_action(pt=pt, instruciton=message)
+        pt, instruction = self.rci_action(pt=pt, instruction=message)
 
         self.past_instruction.append(instruction)
 

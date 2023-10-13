@@ -1,0 +1,16 @@
+main:
+  params:
+    url: https://robotsparebinindustries.com/
+  steps:
+  - clickxpath //*[@id="username"]
+  - type maria
+  - clickxpath //*[@id="password"]
+  - type thoushallnotpass
+  - clickxpath //button[@type='submit']
+  - clickxpath //*[@id="firstname"]
+  - type John
+  - clickxpath //*[@id="lastname"]
+  - type Smith
+  - clickxpath //*[@id="salesresult"]
+  - type 12000
+  - clickxpath //button[@type='submit']

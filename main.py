@@ -5,6 +5,8 @@ import time
 import computergym
 import gym
 from llm_agent import LLMAgent
+from llm_webagent import LLMWebAgent
+from robot import Robot
 
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -25,6 +27,8 @@ def parse_opt():
     parser.add_argument("--irci", type=int, default=1)
     parser.add_argument("--sgrounding", action="store_true", default=False)
     parser.add_argument("--headless", action="store_true", default=True)
+    parser.add_argument("--test_llm", action="store_true", default=False)
+    parser.add_argument("--robot", type=str, default="test")
 
     opt = parser.parse_args()
 
@@ -36,11 +40,11 @@ def web(opt, url):
 
     while True:
         llm_agent = LLMAgent(
-            opt.env, rci_plan_loop=opt.erci, rci_limit=opt.irci, llm=opt.llm
+            opt.env, rci_plan_loop=opt.erci, rci_limit=opt.irci, llm=opt.llm, 
         )
 
         html_body = get_html_state_from_real(driver, opt)
-        logging.info(f"html body: {html_body}")
+        # logging.info(f"html body: {html_body}")
 
         llm_agent.update_html_state(html_body)
 
@@ -69,6 +73,62 @@ def web(opt, url):
     driver.quit()
 
 
+def webagent(opt, url):
+    driver = get_webdriver(url)
+    robot = Robot(opt.robot, url)
+
+    while True:
+        llm_agent = LLMWebAgent(
+            opt.env, rci_plan_loop=opt.erci, rci_limit=opt.irci, llm=opt.llm, 
+            state_grounding=opt.sgrounding, test_llm=opt.test_llm
+        )
+
+        # Set objective (e.g., login with id and pw)
+        goal = input("Type your command (type 'exit' to quit): ")
+        if goal == "exit":
+            break
+
+        html_body = get_html_state_from_real(driver, opt)
+        # logging.info(f"html body: {html_body}")
+
+        llm_agent.update_html_state(html_body)
+
+        llm_agent.set_goal(goal)
+
+        llm_agent.initialize_plan()
+
+        step = llm_agent.get_plan_step()
+        logging.info(f"The number of generated action steps: {step}")
+        for _ in range(step):
+            instruction = llm_agent.generate_action()
+            logging.info(instruction)
+            if not opt.test_llm:
+                time.sleep(30)
+
+            perform_instruction(driver, instruction)
+            robot.add_step(instruction)
+
+            html_body = get_html_state_from_real(driver, opt)
+            llm_agent.update_html_state(html_body)
+
+        time.sleep(5)
+
+    driver.quit()
+
+
+def webrobot(opt, url):
+    # driver = get_webdriver(url)
+    robot = Robot(opt.robot, url)
+    
+    steps = robot.get_steps()
+    for step in steps:
+        perform_instruction(robot, step)
+        time.sleep(1)
+
+    # driver.quit()
+    robot.close()
+
+
 def get_html_state_from_real(driver, opt):
     if opt.env == "facebook":
         main_html_xpath = '//*[@id="content"]'
@@ -86,7 +146,24 @@ def get_html_state_from_real(driver, opt):
     return html_body
 
 
-def perform_instruction(driver, instruction):
+def perform_instruction(robot, instruction):
+    instruction = instruction.split(" ")
+    inst_type = instruction[0]
+    inst_type = inst_type.lower()
+
+    if inst_type == "type":
+        characters = " ".join(instruction[1:])
+        characters = characters.replace('"', "")
+        robot.get_locator().fill(characters)
+    elif inst_type == "clickxpath":
+        xpath = " ".join(instruction[1:])
+        robot.set_locator(xpath)
+        robot.get_locator().click()
+    else:
+        raise ValueError("Invalid instruction")
+
+
+def perform_selenium_instruction(driver, instruction):
     instruction = instruction.split(" ")
     inst_type = instruction[0]
     inst_type = inst_type.lower()
@@ -120,6 +197,11 @@ def perform_instruction(driver, instruction):
 
 
 def get_webdriver(url):
+    robot = Robot("test", url)
+    return robot.get_driver()
+    
+
+def get_selenium_webdriver(url):
     options = webdriver.ChromeOptions()
     # options.add_argument("headless")
     options.add_argument("disable-gpu")
@@ -176,7 +258,7 @@ def miniwob(opt):
 
                 states, rewards, dones, _ = env.step([miniwob_action])
             except ValueError:
-                print("Invalid action or rci action fail")
+                logging.error("Invalid action or rci action fail")
                 rewards = [0]
                 dones = [True]
                 break
@@ -222,6 +304,7 @@ if __name__ == "__main__":
         web(opt, url)
     elif opt.env == "test":
         url = "https://robotsparebinindustries.com/"
-        web(opt, url)
+        # webagent(opt, url)
+        webrobot(opt, url)
     else:
         miniwob(opt)
